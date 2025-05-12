@@ -13,3 +13,7 @@ __pycache__/
 
 # IDE/editor files
 .vscode/
+
+# Data files
+data/raw/
+data/processed/
