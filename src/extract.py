@@ -5,7 +5,9 @@ from kaggle.api.kaggle_api_extended import KaggleApi
 import zipfile
 
 def download_dataset():
+    # ensures data is standarized
     out_dir = 'data/raw/'
+    
     # Download from Kaggle
     api = KaggleApi()
     api.authenticate()
@@ -37,3 +39,4 @@ def download_dataset():
 
     # remove zip file from out_dir
     os.remove(zip_path)
+    return renamed_path

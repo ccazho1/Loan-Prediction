@@ -3,6 +3,9 @@
 # Virtual environment
 venv/
 
+# config files
+.env
+
 # Python bytecode and cache
 __pycache__/
 *.pyc
@@ -17,3 +20,5 @@ __pycache__/
 # Data files
 data/raw/
 data/processed/
+# 
+snowsql-1.2.27-linux_x86_64.bash
