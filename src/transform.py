@@ -4,8 +4,9 @@ import os
 from dotenv import load_dotenv
 import snowflake.connector
 from src import config
-import numpy as np
 from snowflake.connector.pandas_tools import write_pandas
+import src.features
+from src.feature_builder import fb
 
 load_dotenv()
 
@@ -42,32 +43,33 @@ def transformation(df: pd.DataFrame) -> pd.DataFrame:
         .str.replace("[$,]", "", regex=True)
         .astype(float)
     )
+    df["MONTHLY_DEBT"] = df["MONTHLY_DEBT"].astype(float)
+    df["MONTHLY_DEBT"] = df["MONTHLY_DEBT"].fillna(df["MONTHLY_DEBT"].median())
 
     # deal with overscaled credit scores
     df["CREDIT_SCORE"] = df["CREDIT_SCORE"].apply(lambda x: x / 10 if x > 850 else x)
 
-    # cases when both annual income and credit score are missing (21338 records)
-    df["MISSING INCOME_AND_SCORE"] = (
-        df["CREDIT_SCORE"].isnull() & df["ANNUAL_INCOME"].isnull()
-    ).astype(int)
-    median_credit = df["CREDIT_SCORE"].median()
-    median_income = df["ANNUAL_INCOME"].median()
-
-    df["CREDIT_SCORE"].fillna(median_credit, inplace=True)
-    df["ANNUAL_INCOME"].fillna(median_income, inplace=True)
-    
-    
-
     df["CREDIT_SCORE_MISSING"] = df["CREDIT_SCORE"].isnull().astype(int)
+
 
     # deal with null annual income
     df["ANNUAL_INCOME_MISSING"] = df["ANNUAL_INCOME"].isnull().astype(int)
-    df["ANNUAL_INCOME"] = df["ANNUAL_INCOME"].fillna(df["ANNUAL_INCOME"].median())
-    df["LOG_ANNUAL_INCOME"] = np.log1p(df["ANNUAL_INCOME"])
+
+
+    # cases when both annual income and credit score are missing (21338 records)
+    df["MISSING_INCOME_AND_CREDIT_SCORE"] = (
+        df["CREDIT_SCORE"].isnull() & df["ANNUAL_INCOME"].isnull()
+    ).astype(int)
+    
+    # fill missing values with median
+    median_credit = df["CREDIT_SCORE"].median()
+    median_income = df["ANNUAL_INCOME"].median()
+    df["ANNUAL_INCOME"].fillna(median_income, inplace=True)
+    df["CREDIT_SCORE"].fillna(median_credit, inplace=True)
 
     # deal with years_in_job
     df["YEARS_IN_JOB"] = pd.to_numeric(df["YEARS_IN_JOB"], errors="coerce")
-
+ 
     # deal with loan_status
     loan_status_map = {
         "Fully Paid": 0,
@@ -82,46 +84,30 @@ def transformation(df: pd.DataFrame) -> pd.DataFrame:
     median_val = df[df["CURRENT_LOAN_AMOUNT"] != 99999999]["CURRENT_LOAN_AMOUNT"].median()
     df["CURRENT_LOAN_AMOUNT"] = df["CURRENT_LOAN_AMOUNT"].replace(99999999, median_val)
 
-    # deal with housing - standarizing categories for better modeling
-    purpose_map = {
-        "business loan": "business",
-        "small_business": "business",
-        "buy a car": "vehicle",
-        "medical bills": "medical",
-        "take a trip": "vacation",
-        "vacation": "vacation",
-        "major_purchase": "major_purchase",
-        "educational expenses": "education",
-        "buy house": "housing",
-        "moving": "housing",
-        "wedding": "wedding",
-        "renewable_energy": "renewable_energy",
-        "other": "other"
-    }
+    # standarizing categories for better modeling
 
-    df["PURPOSE"] = df["PURPOSE"].str.strip().str.lower() # standardize casing and strip whitespace first
-    df["PURPOSE"] = df["PURPOSE"].map(purpose_map) # groupinng purpose categories
-
-
-    # one hot encoding columns for modeling: Home ownership, Term, Purpose
-    df = pd.get_dummies(df, columns=["HOME_OWNERSHIP", "TERM", "PURPOSE"], drop_first=True)
+    return df
 
 def load_clean(df):
-    conn = get_snowflake_connection()  # your existing function
+    # save to data/clean
+    df.to_csv('data/clean/loan_prediction_info.csv', index='False')
 
+    # upload clean dataset snowflake
+    conn = get_snowflake_connection()
     success, nchunks, nrows, _ = write_pandas(
         conn=conn,
-        df=df,                                 # your transformed dataframe
-        table_name="loan_data_clean",         # desired table name
-        schema=config.SNOWSQL_SCHEMA,         # optional if default schema set
-        database=config.SNOWSQL_DATABASE,     # optional if default database set
-        overwrite=True                        # optional: drop existing table
+        df=df,                                # transformed dataframe
+        table_name="LOAN_DATA_CLEAN",         # table name
+        schema=config.SNOWSQL_SCHEMA,         # schema set
+        database=config.SNOWSQL_DATABASE,     # database set
+        overwrite=True,                       
+        auto_create_table=False               # enable when change column names       
     )
-
 
 if __name__ == "__main__":
 
     df = fetch_raw_data()
-    transformation(df)
+    df = transformation(df)
+    df = fb.run(df)
     load_clean(df)
 
