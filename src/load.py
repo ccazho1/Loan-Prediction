@@ -4,6 +4,9 @@ from src import config
 
 
 CREATE_TABLE_SQL = f"""
+CREATE WAREHOUSE IF NOT EXISTS {config.SNOWSQL_WAREHOUSE};
+CREATE DATABASE IF NOT EXISTS {config.SNOWSQL_DATABASE};
+CREATE SCHEMA IF NOT EXISTS {config.SNOWSQL_SCHEMA};
 USE WAREHOUSE {config.SNOWSQL_WAREHOUSE};
 USE DATABASE {config.SNOWSQL_DATABASE};
 USE SCHEMA {config.SNOWSQL_SCHEMA};
@@ -111,7 +114,7 @@ def verify_load():
 
 def load_pipeline():
     """Main load pipeline: create table, then upload and copy data."""
-    # create_table()
+    create_table()
     upload_and_copy_to_snowflake()
     verify_load()
 
